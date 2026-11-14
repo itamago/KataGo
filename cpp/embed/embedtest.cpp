@@ -167,6 +167,36 @@ static bool testEngine(bool useGPU, const std::string& model, const std::string&
   if(useGPU && info.provider != "directml")
     std::printf("  WARNING : DirectML asked, CPU running\n");
 
+  // Walled territories : Black's lower-left (x <= 6, y >= 12), White's upper-right (x >= 12, y <= 6), Black to move
+  {
+    GameSetup walls;
+    for(int i = 0; i <= 7; i++) {
+      walls.setupBlack.push_back(Move::point(i, 11));
+      walls.setupWhite.push_back(Move::point(11 + i, 7));
+    }
+    for(int i = 0; i <= 6; i++) {
+      walls.setupBlack.push_back(Move::point(7, 12 + i));
+      walls.setupWhite.push_back(Move::point(11, i));
+    }
+    walls.firstPlayer = Stone::Black;
+    Analysis rawWalls;
+    CHECK(engine.setPosition(walls, std::vector<Move>(), error));
+    CHECK(engine.evaluateRaw(rawWalls, error));
+    const float insideBlack = rawWalls.ownershipBlack[16 * 19 + 2];
+    const float insideWhite = rawWalls.ownershipBlack[2 * 19 + 16];
+    std::printf("  walls, Black to move : inside Black's %+.2f, inside White's %+.2f\n", insideBlack, insideWhite);
+    CHECK(insideBlack > 0.5f);
+    CHECK(insideWhite < -0.5f);
+
+    // The same, White to move : the same owners
+    walls.firstPlayer = Stone::White;
+    CHECK(engine.setPosition(walls, std::vector<Move>(), error));
+    CHECK(engine.evaluateRaw(rawWalls, error));
+    std::printf("  walls, White to move : inside Black's %+.2f, inside White's %+.2f\n", rawWalls.ownershipBlack[16 * 19 + 2], rawWalls.ownershipBlack[2 * 19 + 16]);
+    CHECK(rawWalls.ownershipBlack[16 * 19 + 2] > 0.5f);
+    CHECK(rawWalls.ownershipBlack[2 * 19 + 16] < -0.5f);
+  }
+
   // A position
   GameSetup setup;
   std::vector<Move> moves = {Move::point(3, 3), Move::point(15, 15), Move::point(15, 3)};
@@ -177,6 +207,19 @@ static bool testEngine(bool useGPU, const std::string& model, const std::string&
   CHECK(raw.policy.size() == 19 * 19 + 1);
   CHECK(raw.ownershipBlack.size() == 19 * 19);
   std::printf("  raw : winrate Black %.4f, lead Black %.2f\n", raw.winrateBlack, raw.scoreLeadBlack);
+
+  // Ownership map, on demand (KATAGO_TEST_PRINT) : x Black, o White ; the 3-3 point of a lone 4-4 reads as the opponent's, KataGo's usual view
+  if(std::getenv("KATAGO_TEST_PRINT") != NULL) {
+    for(int y = 0; y < 19; y++) {
+      std::printf("   ");
+      for(int x = 0; x < 19; x++) {
+        const bool isStone = (x == 3 && y == 3) || (x == 15 && y == 3) || (x == 15 && y == 15);
+        const float o = raw.ownershipBlack[y * 19 + x];
+        std::printf("%c", isStone ? (x == 15 && y == 15 ? 'W' : 'B') : (o > 0.15f ? 'x' : (o < -0.15f ? 'o' : '.')));
+      }
+      std::printf("\n");
+    }
+  }
 
   // A move at full strength
   {

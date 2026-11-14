@@ -226,11 +226,13 @@ struct Engine::Impl {
     return analysis;
   }
 
-  void noteSearchSpeed(const Analysis& analysis, double seconds) {
-    if(seconds <= 0.05 || analysis.visits <= 0)
+  // Speed of a search : only the visits it added, not those of the tree it reused
+  void noteSearchSpeed(const Analysis& analysis, int64_t visitsStart, double seconds) {
+    const int64_t visitsAdded = analysis.visits - visitsStart;
+    if(seconds <= 0.05 || visitsAdded <= 0)
       return;
     std::lock_guard<std::mutex> lock(mutexInfo);
-    info.visitsPerSecond = (double)analysis.visits / seconds;
+    info.visitsPerSecond = (double)visitsAdded / seconds;
   }
 };
 
@@ -453,14 +455,15 @@ bool Engine::genMoveAsync(const PlayStyle& style, std::function<void(const Move&
     impl->bot->setParams(impl->loadParams(impl->keysForStyle(style)));
     Player pla = impl->bot->getRootPla();
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    const int64_t visitsStart = impl->bot->getSearch()->getRootVisits();
     Impl* state = impl;
     const bool allowResign = style.allowResign;
     impl->bot->genMoveAsync(pla, ++impl->searchId, TimeControls(), 1.0,
-      [state, onMove, start, pla, allowResign](Loc moveLoc, int searchId, Search* search) {
+      [state, onMove, start, visitsStart, pla, allowResign](Loc moveLoc, int searchId, Search* search) {
         (void)searchId;
         Analysis analysis = state->makeAnalysis(search, 8);
         analysis.isFinal = true;
-        state->noteSearchSpeed(analysis, secondsSince(start));
+        state->noteSearchSpeed(analysis, visitsStart, secondsSince(start));
 
         // Resign when hopeless : the bot's winrate under 3 %, more than 15 points behind, after a quarter of the board
         const double winrateBot = pla == P_BLACK ? analysis.winrateBlack : 1.0 - analysis.winrateBlack;
@@ -493,23 +496,24 @@ bool Engine::analyzeAsync(int64_t maxVisits, double periodSeconds, int countCand
     impl->bot->setParams(impl->loadParams(keys));
     Player pla = impl->bot->getRootPla();
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    const int64_t visitsStart = impl->bot->getSearch()->getRootVisits();
     Impl* state = impl;
     const int count = std::max(1, countCandidates);
 
     // A search with periodic reports, then a final one
     impl->bot->genMoveAsyncAnalyze(pla, ++impl->searchId, TimeControls(), 1.0,
-      [state, onAnalysis, start, count](Loc moveLoc, int searchId, Search* search) {
+      [state, onAnalysis, start, visitsStart, count](Loc moveLoc, int searchId, Search* search) {
         (void)moveLoc;
         (void)searchId;
         Analysis analysis = state->makeAnalysis(search, count);
         analysis.isFinal = true;
-        state->noteSearchSpeed(analysis, secondsSince(start));
+        state->noteSearchSpeed(analysis, visitsStart, secondsSince(start));
         onAnalysis(analysis);
       },
       periodSeconds, periodSeconds,
-      [state, onAnalysis, start, count](const Search* search) {
+      [state, onAnalysis, start, visitsStart, count](const Search* search) {
         Analysis analysis = state->makeAnalysis(search, count);
-        state->noteSearchSpeed(analysis, secondsSince(start));
+        state->noteSearchSpeed(analysis, visitsStart, secondsSince(start));
         onAnalysis(analysis);
       }
     );
