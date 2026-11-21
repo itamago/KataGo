@@ -166,6 +166,10 @@ class Engine {
   // DirectML usable ? Creates a session on a one-node graph with the DirectML provider.
   static bool probeDirectML(int indexAdapter, std::string& errorMsg);
 
+  // A model file held in memory (assets packed in the executable) : initialize reads it there when a config names this path.
+  // The bytes must stay valid while an engine may load it.
+  static void registerMemoryFile(const std::string& path, const void* data, size_t size);
+
  private:
   struct Impl;
   Impl* impl;

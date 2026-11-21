@@ -17,6 +17,10 @@ namespace FileUtils {
   void open(std::ifstream& in, const std::string& filename, std::ios_base::openmode mode = std::ios_base::in);
   void open(std::ofstream& out, const std::string& filename, std::ios_base::openmode mode = std::ios_base::out);
 
+  // A file held in memory by an embedding application (assets packed in its executable) : loadFileIntoString reads it there,
+  // under the same name, instead of the disk. The bytes must stay valid while the file may be loaded.
+  void registerMemoryFile(const std::string& filename, const void* data, size_t size);
+
   void loadFileIntoString(const std::string& filename, const std::string& expectedSha256, std::string& buf);
   void loadFileIntoString(const std::string& filename, const std::string& expectedSha256, std::string& buf, std::string* actualSha256Buf);
   void uncompressAndLoadFileIntoString(const std::string& filename, const std::string& expectedSha256, std::string& buf);

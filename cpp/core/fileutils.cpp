@@ -3,6 +3,8 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <map>
+#include <mutex>
 #include <zlib.h>
 #include <ghc/filesystem.hpp>
 
@@ -114,18 +116,47 @@ void FileUtils::loadFileIntoString(const string& filename, const string& expecte
   loadFileIntoString(filename, expectedSha256, str, NULL);
 }
 
+//Files held in memory by an embedding application, by name
+static std::mutex& getMemoryFilesMutex() {
+  static std::mutex mutexMemoryFiles;
+  return mutexMemoryFiles;
+}
+static std::map<string, std::pair<const char*, size_t>>& getMemoryFiles() {
+  static std::map<string, std::pair<const char*, size_t>> memoryFiles;
+  return memoryFiles;
+}
+
+void FileUtils::registerMemoryFile(const string& filename, const void* data, size_t size) {
+  std::lock_guard<std::mutex> lock(getMemoryFilesMutex());
+  getMemoryFiles()[filename] = std::make_pair((const char*)data, size);
+}
+
 void FileUtils::loadFileIntoString(const string& filename, const string& expectedSha256, string& str, string* actualSha256Buf) {
-  ifstream in;
-  open(in, filename, std::ios::in | std::ios::binary | std::ios::ate);
+  //Held in memory ?
+  bool isInMemory = false;
+  {
+    std::lock_guard<std::mutex> lock(getMemoryFilesMutex());
+    auto iter = getMemoryFiles().find(filename);
+    if(iter != getMemoryFiles().end()) {
+      str.assign(iter->second.first, iter->second.second);
+      isInMemory = true;
+    }
+  }
 
-  ifstream::pos_type fileSize = in.tellg();
-  if(fileSize < 0)
-    throw StringError("tellg failed to determine size");
+  //Otherwise read from the disk
+  if(!isInMemory) {
+    ifstream in;
+    open(in, filename, std::ios::in | std::ios::binary | std::ios::ate);
 
-  in.seekg(0, std::ios::beg);
-  str.resize(fileSize);
-  in.read(&str[0], fileSize);
-  in.close();
+    ifstream::pos_type fileSize = in.tellg();
+    if(fileSize < 0)
+      throw StringError("tellg failed to determine size");
+
+    in.seekg(0, std::ios::beg);
+    str.resize(fileSize);
+    in.read(&str[0], fileSize);
+    in.close();
+  }
 
   if(expectedSha256 != "" || actualSha256Buf != NULL) {
     char hashResultBuf[65];

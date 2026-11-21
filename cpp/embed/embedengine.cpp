@@ -1,6 +1,7 @@
 #include "../embed/embedinternal.h"
 
 #include "../core/config_parser.h"
+#include "../core/fileutils.h"
 #include "../core/global.h"
 #include "../core/logger.h"
 #include "../core/rand.h"
@@ -249,6 +250,10 @@ Engine::Engine()
 Engine::~Engine() {
   finalize();
   delete impl;
+}
+
+void Engine::registerMemoryFile(const string& path, const void* data, size_t size) {
+  FileUtils::registerMemoryFile(path, data, size);
 }
 
 bool Engine::probeDirectML(int indexAdapter, string& errorMsg) {
