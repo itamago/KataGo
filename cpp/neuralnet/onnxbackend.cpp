@@ -189,7 +189,10 @@ struct ComputeContext {
       transformerNHWC(true),
       skipScale8(false),
       padBatchMode(enabled_t::Auto)
-  {}
+  {
+    // No telemetry event from ONNX Runtime : Goban's privacy policy says so
+    env.DisableTelemetryEvents();
+  }
 };
 
 static std::vector<std::string> parseDeviceNames(const std::string& deviceType);

@@ -292,6 +292,7 @@ bool Engine::probeDirectML(int indexAdapter, string& errorMsg) {
       return false;
     }
     Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "KataGoEmbedProbe");
+    env.DisableTelemetryEvents();                                   // No telemetry event from ONNX Runtime
     Ort::SessionOptions options;
     options.DisableMemPattern();
     options.SetExecutionMode(ORT_SEQUENTIAL);
