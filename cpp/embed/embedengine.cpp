@@ -369,11 +369,16 @@ bool Engine::initialize(const EngineConfig& config, string& errorMsg) {
 
       // Nets
       const int countThreads = std::max(1, config.countThreads);
+      const int countNets = config.modelFileHuman.empty() ? 1 : 2;
+      if(config.onNetLoading)
+        config.onNetLoading(0, countNets);
       impl->nnEval = Setup::initializeNNEvaluator(
         config.modelFile, config.modelFile, "", *impl->cfg, *impl->logger, *impl->seedRand, countThreads,
         Board::MAX_LEN, Board::MAX_LEN, Setup::MaxBatchSizeRequest::fromConcurrency(), false, false, Setup::SETUP_FOR_GTP
       );
       if(!config.modelFileHuman.empty()) {
+        if(config.onNetLoading)
+          config.onNetLoading(1, countNets);
         impl->humanEval = Setup::initializeNNEvaluator(
           config.modelFileHuman, config.modelFileHuman, "", *impl->cfg, *impl->logger, *impl->seedRand, countThreads,
           Board::MAX_LEN, Board::MAX_LEN, Setup::MaxBatchSizeRequest::fromConcurrency(), false, false, Setup::SETUP_FOR_GTP

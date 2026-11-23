@@ -103,6 +103,7 @@ struct EngineConfig {
   int indexAdapter = 0;              // onnxDeviceToUse
   int countThreads = 4;              // numSearchThreads
   std::vector<std::pair<std::string, std::string>> keysExtra;   // any other KataGo config key
+  std::function<void(int indexNet, int countNets)> onNetLoading;   // called by initialize before each net : 0 the main one, 1 the human one
 };
 
 struct PlayStyle {
