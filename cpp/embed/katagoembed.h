@@ -55,6 +55,16 @@ struct BoardState {
   bool isGameOver = false;           // two consecutive passes, or finished by the rules
 };
 
+// The count of one player, line by line, as the rules count it
+struct CountDetail {
+  int territory = 0;                 // empty points owned, the points of the dead stones included
+  int stones = 0;                    // living stones on the board : area scoring only
+  int prisoners = 0;                 // stones captured during the game : territory scoring only
+  int deadStones = 0;                // the opponent's stones removed at the count : territory scoring only
+  float komi = 0.0f;                 // White : the komi, and the handicap compensation of the rules
+  float total = 0.0f;
+};
+
 struct ScoreResult {
   float scoreBlack = 0.0f;           // > 0 : Black wins by that much
   Stone winner = Stone::Empty;
@@ -63,6 +73,10 @@ struct ScoreResult {
   int territoryBlack = 0;            // empty points owned
   int territoryWhite = 0;
   bool fromNeuralNet = false;        // false : only the regions settled without any search were known
+  bool isTerritoryScoring = true;    // japanese, korean : territory + prisoners ; otherwise stones + territory
+  CountDetail countBlack;            // filled by Game::scoreWithDead
+  CountDetail countWhite;
+  bool isSameAsKataGo = true;        // false : KataGo's own total differs (territory scoring with dame open, a group tax, a button...)
 };
 
 // Rules authority : synchronous, no neural net, cheap. Single-threaded.
@@ -88,6 +102,8 @@ class Game {
   bool isLadderCaptured(int x, int y) const;            // a chain in atari that cannot escape
   void getAreaPassAlive(std::vector<Stone>& out) const; // regions settled without any search
   bool scoreSimple(ScoreResult& out) const;             // only what is settled without a search
+  bool scoreWithDead(const std::vector<uint8_t>& isDead, ScoreResult& out) const;
+  bool isTerritoryScoring() const;                      // japanese, korean : territory and prisoners ; otherwise stones and territory   // the exact count of the rules, these stones removed as dead (size * size, 1 = dead)
   bool loadSgf(const std::string& path, std::string& errorMsg);
   bool saveSgf(const std::string& path, const std::string& nameBlack, const std::string& nameWhite, std::string& errorMsg) const;
 
@@ -158,8 +174,9 @@ class Engine {
   bool setPosition(const GameSetup& setup, const std::vector<Move>& moves, std::string& errorMsg);
   bool genMoveAsync(const PlayStyle& style, std::function<void(const Move& move, bool isResign, const Analysis& analysis)> onMove, std::string& errorMsg);
   bool analyzeAsync(int64_t maxVisits, double periodSeconds, int countCandidates, std::function<void(const Analysis&)> onAnalysis, std::string& errorMsg);
+  bool analyzeSync(int64_t maxVisits, int countCandidates, Analysis& out, std::string& errorMsg);   // a search at full strength, no human profile, waited for
   bool evaluateRaw(Analysis& out, std::string& errorMsg);                    // the net alone, no search : instant
-  bool scoreFinal(ScoreResult& out, int64_t visits, std::string& errorMsg);  // dead stones from the ownership of a search
+  bool scoreFinal(ScoreResult& out, int64_t visits, std::string& errorMsg);  // dead stones from the ownership of a search at full strength
   void stop();                                                               // stops a search and waits for it
   void setLogCallback(std::function<void(const std::string& line)> onLog);   // before initialize
   EngineInfo getInfo() const;

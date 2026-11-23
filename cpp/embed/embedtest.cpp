@@ -105,6 +105,54 @@ static void testRules() {
     CHECK((int)score.owner.size() == 19 * 19);
   }
 
+  // Exact count with dead stones : two walls on 9x9, each closing two eyes, a dame column between them, a dead white stone in Black's area
+  {
+    const char* rulesTested[2] = { "japanese", "chinese" };
+    for(int indexRules = 0; indexRules < 2; indexRules++) {
+      Game game;
+      GameSetup setup;
+      setup.size = 9;
+      setup.rules = rulesTested[indexRules];
+      setup.komi = indexRules == 0 ? 6.5f : 7.5f;
+      for(int y = 0; y < 9; y++) {
+        setup.setupBlack.push_back(Move::point(3, y));
+        setup.setupWhite.push_back(Move::point(5, y));
+      }
+      for(int x = 0; x < 3; x++) {
+        setup.setupBlack.push_back(Move::point(x, 4));
+        setup.setupWhite.push_back(Move::point(6 + x, 4));
+      }
+      setup.setupWhite.push_back(Move::point(1, 1));
+      CHECK(game.reset(setup, error));
+      CHECK(game.play(Move::pass(), error));
+      CHECK(game.play(Move::pass(), error));
+      std::vector<uint8_t> isDead(81, 0);
+      isDead[1 * 9 + 1] = 1;
+      ScoreResult score;
+      CHECK(game.scoreWithDead(isDead, score));
+      CHECK(score.winner == Stone::White);
+      CHECK(score.countBlack.territory == 24);
+      CHECK(score.countWhite.territory == 24);
+      CHECK(score.owner[1 * 9 + 1] == Stone::Black);
+      CHECK(score.owner[4 * 9 + 4] == Stone::Empty);
+      if(indexRules == 0) {
+        CHECK(score.isTerritoryScoring);
+        CHECK(score.countBlack.deadStones == 1);
+        CHECK(std::fabs(score.countBlack.total - 25.0f) < 0.01f);
+        CHECK(std::fabs(score.countWhite.total - 30.5f) < 0.01f);
+        CHECK(std::fabs(score.scoreBlack + 5.5f) < 0.01f);
+      }
+      else {
+        CHECK(!score.isTerritoryScoring);
+        CHECK(score.isSameAsKataGo);
+        CHECK(score.countBlack.stones == 12);
+        CHECK(score.countWhite.stones == 12);
+        CHECK(std::fabs(score.countWhite.total - 43.5f) < 0.01f);
+        CHECK(std::fabs(score.scoreBlack + 7.5f) < 0.01f);
+      }
+    }
+  }
+
   // SGF round trip
   {
     Game game;

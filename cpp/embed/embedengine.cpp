@@ -536,6 +536,33 @@ bool Engine::analyzeAsync(int64_t maxVisits, double periodSeconds, int countCand
   return false;
 }
 
+bool Engine::analyzeSync(int64_t maxVisits, int countCandidates, Analysis& out, string& errorMsg) {
+  out = Analysis();
+  if(impl->bot == NULL) {
+    errorMsg = "Engine not initialized";
+    return false;
+  }
+  try {
+    // Full strength : no human profile
+    impl->bot->stopAndWait();
+    PlayStyle style;
+    style.maxVisits = std::max<int64_t>(1, maxVisits);
+    impl->bot->setParams(impl->loadParams(impl->keysForStyle(style)));
+    Player pla = impl->bot->getRootPla();
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    const int64_t visitsStart = impl->bot->getSearch()->getRootVisits();
+    impl->bot->genMoveSynchronous(pla, TimeControls());
+    out = impl->makeAnalysis(impl->bot->getSearch(), std::max(1, countCandidates));
+    out.isFinal = true;
+    impl->noteSearchSpeed(out, visitsStart, secondsSince(start));
+    return true;
+  }
+  catch(const std::exception& e) {
+    errorMsg = e.what();
+  }
+  return false;
+}
+
 bool Engine::evaluateRaw(Analysis& out, string& errorMsg) {
   out = Analysis();
   if(impl->bot == NULL) {
@@ -603,10 +630,13 @@ bool Engine::scoreFinal(ScoreResult& out, int64_t visits, string& errorMsg) {
     if(!impl->buildPosition(impl->setup, moves, board, pla, hist, errorMsg))
       return false;
 
-    // Dead stones and lead, as KataGo's GTP final_status_list and final_score
+    // Dead stones and lead, as KataGo's GTP final_status_list and final_score : at full strength, whatever the level played
     SearchParams paramsOld = impl->bot->getParams();
-    Search* search = impl->bot->getSearchStopAndWait();
     const int64_t countVisits = std::max<int64_t>(50, visits);
+    PlayStyle styleFull;
+    styleFull.maxVisits = countVisits;
+    impl->bot->setParams(impl->loadParams(impl->keysForStyle(styleFull)));
+    Search* search = impl->bot->getSearchStopAndWait();
     vector<double> ownership;
     vector<bool> isAlive = PlayUtils::computeAnticipatedStatusesWithOwnership(search, board, hist, pla, countVisits, ownership);
     double leadWhite = PlayUtils::computeLead(search, NULL, board, hist, pla, countVisits, OtherGameProperties());

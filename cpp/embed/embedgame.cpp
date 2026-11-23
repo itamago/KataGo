@@ -445,6 +445,109 @@ bool Game::scoreSimple(ScoreResult& out) const {
   }
 }
 
+bool Game::scoreWithDead(const vector<uint8_t>& isDead, ScoreResult& out) const {
+  out = ScoreResult();
+  if(impl == NULL)
+    return false;
+  try {
+    const Board& board = impl->board;
+    const int size = board.x_size;
+    if((int)isDead.size() != size * size)
+      return false;
+
+    // The dead stones removed
+    Board cleared = board;
+    int countDeadBlack = 0;
+    int countDeadWhite = 0;
+    out.isDead.assign(size * size, 0);
+    for(int y = 0; y < size; y++) {
+      for(int x = 0; x < size; x++) {
+        Loc loc = Location::getLoc(x, y, size);
+        const int index = y * size + x;
+        if(board.colors[loc] == C_EMPTY || isDead[index] == 0)
+          continue;
+        out.isDead[index] = 1;
+        if(board.colors[loc] == C_BLACK)
+          countDeadBlack++;
+        else
+          countDeadWhite++;
+        cleared.setStone(loc, C_EMPTY);
+      }
+    }
+
+    // KataGo's own count on the cleared board
+    BoardHistory hist = impl->hist;
+    Color areaKataGo[Board::MAX_ARR_SIZE];
+    hist.endAndScoreGameNow(cleared, areaKataGo);
+    out.isTerritoryScoring = hist.rules.scoringRule == Rules::SCORING_TERRITORY;
+
+    // Area : KataGo's under area scoring ; under territory scoring, each empty region bordered by one colour,
+    // as the Japanese rules count it with the dame left open (KataGo's strict territory count takes any group touching a dame for a seki)
+    Color area[Board::MAX_ARR_SIZE];
+    if(out.isTerritoryScoring) {
+      BoardHistory histArea = impl->hist;
+      histArea.rules.scoringRule = Rules::SCORING_AREA;
+      histArea.rules.taxRule = Rules::TAX_NONE;
+      histArea.getAreaNow(cleared, area);
+    }
+    else
+      std::copy(areaKataGo, areaKataGo + Board::MAX_ARR_SIZE, area);
+
+    // Owner of each point : its territory and its living stones
+    int countStonesBlack = 0;
+    int countStonesWhite = 0;
+    out.owner.resize(size * size);
+    for(int y = 0; y < size; y++) {
+      for(int x = 0; x < size; x++) {
+        Loc loc = Location::getLoc(x, y, size);
+        Stone owner = toStone(area[loc]);
+        out.owner[y * size + x] = owner;
+        if(cleared.colors[loc] == C_BLACK)
+          countStonesBlack++;
+        else if(cleared.colors[loc] == C_WHITE)
+          countStonesWhite++;
+        else if(owner == Stone::Black)
+          out.territoryBlack++;
+        else if(owner == Stone::White)
+          out.territoryWhite++;
+      }
+    }
+
+    // Detail : territory and prisoners, or stones and territory
+    out.countBlack.territory = out.territoryBlack;
+    out.countWhite.territory = out.territoryWhite;
+    out.countWhite.komi = hist.rules.komi + hist.whiteHandicapBonusScore;
+    if(out.isTerritoryScoring) {
+      out.countBlack.prisoners = board.numWhiteCaptures;
+      out.countWhite.prisoners = board.numBlackCaptures;
+      out.countBlack.deadStones = countDeadWhite;
+      out.countWhite.deadStones = countDeadBlack;
+    }
+    else {
+      out.countBlack.stones = countStonesBlack;
+      out.countWhite.stones = countStonesWhite;
+    }
+    out.countBlack.total = (float)(out.countBlack.territory + out.countBlack.stones + out.countBlack.prisoners + out.countBlack.deadStones) + out.countBlack.komi;
+    out.countWhite.total = (float)(out.countWhite.territory + out.countWhite.stones + out.countWhite.prisoners + out.countWhite.deadStones) + out.countWhite.komi;
+
+    // Result : the detail's ; KataGo's own total compared
+    const float whiteMinusBlack = out.countWhite.total - out.countBlack.total;
+    out.scoreBlack = -whiteMinusBlack;
+    out.winner = whiteMinusBlack < 0.0f ? Stone::Black : whiteMinusBlack > 0.0f ? Stone::White : Stone::Empty;
+    const float difference = whiteMinusBlack - hist.finalWhiteMinusBlackScore;
+    out.isSameAsKataGo = difference > -0.01f && difference < 0.01f;
+    out.fromNeuralNet = false;
+    return true;
+  }
+  catch(...) {
+    return false;
+  }
+}
+
+bool Game::isTerritoryScoring() const {
+  return impl != NULL && impl->hist.rules.scoringRule == Rules::SCORING_TERRITORY;
+}
+
 bool Game::loadSgf(const string& path, string& errorMsg) {
   try {
     unique_ptr<CompactSgf> sgf = CompactSgf::loadFile(path);
