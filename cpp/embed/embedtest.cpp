@@ -342,6 +342,22 @@ static bool testEngine(bool useGPU, const std::string& model, const std::string&
     std::printf("  score : Black %+.1f in %.2f s\n", score.scoreBlack, secondsSince(start));
   }
 
+  // Positions one after the other, each waited for : each has its own values
+  {
+    GameSetup setupWalk;
+    std::vector<Move> movesWalk;
+    const Move walk[6] = { Move::point(3, 3), Move::point(15, 15), Move::point(15, 3), Move::point(3, 15), Move::point(9, 9), Move::point(9, 3) };
+    for(int count = 0; count <= 6; count++) {
+      CHECK(engine.setPosition(setupWalk, movesWalk, error));
+      Analysis analysis;
+      CHECK(engine.analyzeSync(50, 1, analysis, error));
+      CHECK(analysis.visits > 0);
+      std::printf("  position %d : Black %.3f, lead %+.1f, %lld visits\n", count, analysis.winrateBlack, analysis.scoreLeadBlack, (long long)analysis.visits);
+      if(count < 6)
+        movesWalk.push_back(walk[count]);
+    }
+  }
+
   engine.finalize();
   return true;
 }
